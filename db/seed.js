@@ -35,24 +35,24 @@ async function createTables() {
         password varchar(255) NOT NULL,
         name varchar(255) NOT NULL,
         location varchar(255) NOT NULL,
-        active boolean DEFAULT true,
+        active boolean DEFAULT true
       );
       CREATE TABLE posts (
         id SERIAL PRIMARY KEY,
         "authorId" INTEGER REFERENCES users(id),
         title varchar(255) NOT NULL,
         content TEXT NOT NULL,
-        active BOOLEAN DEFAULT true,
+        active BOOLEAN DEFAULT true
       );
-      CREATE TABLE tags (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) UNIQUE NOT NULL,
+      CREATE TABLE tags(
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) UNIQUE NOT NULL
       );
-      CREATE TABLE post_tags (
-        “postId” INTEGER REFERENCES posts(id),
-        “tagId” INTEGER REFERENCES tags(id),
-        Add a UNIQUE constraint on (“postId”, “tagId”),
-      )
+      CREATE TABLE post_tags(
+          "postId" INTEGER REFERENCES posts(id),
+          "tagId" INTEGER REFERENCES tags(id),
+          UNIQUE("postId","tagId")
+      );
     `);
 
     console.log("Finished building tables!");
