@@ -88,6 +88,64 @@ async function getUserById(userId) {
  * POST Methods
  */
 
+ async function createPostTag(postId, tagId) {
+  try {
+    await client.query(`
+      INSERT INTO post_tags("postId", "tagId")
+      VALUES ($1, $2)
+      ON CONFLICT ("postId", "tagId") DO NOTHING;
+    `, [postId, tagId]);
+  } catch (error) {
+    throw error;
+  }
+}
+
+async function getPostById(postId) {
+  try {
+    const { rows: [ post ]  } = await client.query(`
+      SELECT *
+      FROM posts
+      WHERE id=$1;
+    `, [postId]);
+
+    const { rows: tags } = await client.query(`
+      SELECT tags.*
+      FROM tags
+      JOIN post_tags ON tags.id=post_tags."tagId"
+      WHERE post_tags."postId"=$1;
+    `, [postId])
+
+    const { rows: [author] } = await client.query(`
+      SELECT id, username, name, location
+      FROM users
+      WHERE id=$1;
+    `, [post.authorId])
+
+    post.tags = tags;
+    post.author = author;
+
+    delete post.authorId;
+
+    return post;
+  } catch (error) {
+    throw error;
+  }
+}
+
+ async function addTagsToPost(postId, tagList) {
+  try {
+    const createPostTagPromises = tagList.map(
+      tag => createPostTag(postId, tag.id)
+    );
+
+    await Promise.all(createPostTagPromises);
+
+    return await getPostById(postId);
+  } catch (error) {
+    throw error;
+  }
+}
+
  async function createPost({
   authorId,
   title,
@@ -101,6 +159,7 @@ async function getUserById(userId) {
       RETURNING *;
     `, [authorId, title, content]);
 
+
     const tagList = await createTags(tags);
 
     return await addTagsToPost(post.id, tagList);
@@ -109,7 +168,75 @@ async function getUserById(userId) {
   }
 }
 
-async function updatePost(id, fields = {}) {
+async function createTags(tagList) {
+  if (tagList.length === 0) { 
+    return; 
+  }
+
+  // need something like: $1), ($2), ($3 
+  const insertValues = tagList.map(
+    (_, index) => `$${index + 1}`).join('), (');
+  // then we can use: (${ insertValues }) in our string template
+
+  // need something like $1, $2, $3
+  const selectValues = tagList.map(
+    (_, index) => `$${index + 1}`).join(', ');
+  // then we can use (${ selectValues }) in our string template
+
+  try {
+    await client.query(
+      `
+      INSERT INTO tags(name) 
+      VALUES(${insertValues})
+      ON CONFLICT (name) DO NOTHING;
+    `,
+      tagList
+    );
+
+    const { rows } = await client.query(
+      `
+      SELECT * FROM tags
+      WHERE name
+      IN (${selectValues});
+      `,
+      tagList
+    );
+  
+
+    return rows;
+  }catch (error) {
+    throw error
+  }
+}
+//   try {
+//     await client.query(`
+//     INSERT INTO tags(name)
+//     VALUES ($1), ($2), ($3)
+//     ON CONFLICT (name) DO NOTHING;
+//     `, tagList);
+//     return;
+//   } finally {
+//     const { rows } = await client.query(`
+//     SELECT * FROM tags
+//     WHERE name
+//     IN ($1, $2, $3);
+//     )
+//     `);
+//     return rows;
+
+//     // insert the tags, doing nothing on conflict
+//     // returning nothing, we'll query after
+
+//     // select all tags where the name is in our taglist
+//     // return the rows from the query
+//   }    
+// }
+
+
+async function updatePost(postsId, fields = {}) {
+  const { tags } = fields; 
+  delete fields.tags;
+
   // build the set string
   const setString = Object.keys(fields).map(
     (key, index) => `"${ key }"=$${ index + 1 }`
@@ -124,7 +251,7 @@ async function updatePost(id, fields = {}) {
     const { rows: [ post ] } = await client.query(`
       UPDATE posts
       SET ${ setString }
-      WHERE id=${ id }
+      WHERE id=${ postsId }
       RETURNING *;
     `, Object.values(fields));
 
@@ -161,15 +288,38 @@ async function getPostsByUser(userId) {
   }
 }
 
+async function getPostsByTagName(tagName) {
+  try {
+    const { rows: postIds } = await client.query(`
+      SELECT posts.id
+      FROM posts
+      JOIN post_tags ON posts.id=post_tags."postId"
+      JOIN tags ON tags.id=post_tags."tagId"
+      WHERE tags.name=$1;
+    `, [tagName]);
+
+    return await Promise.all(postIds.map(
+      post => getPostById(post.id)
+    ));
+  } catch (error) {
+    throw error;
+  }
+}
+
 module.exports = {  
   client,
+  addTagsToPost,
+  createPostTag,
   createUser,
   updateUser,
+  getPostById,
   getAllUsers,
   getUserById,
+  getPostsByTagName,
   createPost,
   updatePost,
   getAllPosts,
+  createTags,
   getPostsByUser
 }
 
