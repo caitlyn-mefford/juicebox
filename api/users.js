@@ -9,12 +9,16 @@ usersRouter.use((req, res, next) => {
 });
 
 usersRouter.get('/', async (req, res) => {
+  //try catch
+  try {
     const users = await getAllUsers();
-  
     res.send({
       users
-    });
-  });
+    })
+  } catch (error) {
+    console.log(error);
+  }
+});
 
   usersRouter.post('/login', async (req, res, next) => {
     const { username, password } = req.body;
